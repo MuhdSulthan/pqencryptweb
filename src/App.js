@@ -220,9 +220,10 @@ function App() {
     setRoomKey(key);
     setUsername(name);
     
-    const newSocket = io('http://3.110.215.75:3000', {
+    const newSocket = io('https://3.110.215.75:3000', {
       transports: ['polling', 'websocket'],
       reconnection: true,
+      rejectUnauthorized: false, // Ignore self-signed certificate for development
     });
 
     newSocket.on('connect', () => {
@@ -984,7 +985,13 @@ function App() {
 
   const checkRoomAccess = async (roomCode) => {
     try {
-      const response = await fetch(`http://192.168.137.15:3000/room/${roomCode}`);
+      const response = await fetch(`https://3.110.215.75:3000/room/${roomCode}`, {
+      mode: 'cors',
+      credentials: 'omit',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
       const data = await response.json();
       
       if (response.ok) {
