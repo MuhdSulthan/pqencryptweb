@@ -220,10 +220,10 @@ function App() {
     setRoomKey(key);
     setUsername(name);
     
-    const newSocket = io('https://3.110.215.75:3000', {
+    // Use production domain with Let's Encrypt SSL
+const newSocket = io('https://maxyserver.servehalflife.com', {
       transports: ['polling', 'websocket'],
       reconnection: true,
-      rejectUnauthorized: false, // Ignore self-signed certificate for development
     });
 
     newSocket.on('connect', () => {
@@ -985,13 +985,13 @@ function App() {
 
   const checkRoomAccess = async (roomCode) => {
     try {
-      const response = await fetch(`https://3.110.215.75:3000/room/${roomCode}`, {
-      mode: 'cors',
-      credentials: 'omit',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+      const response = await fetch(`https://maxyserver.servehalflife.com/room/${roomCode}`, {
+        mode: 'cors',
+        credentials: 'omit',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
       const data = await response.json();
       
       if (response.ok) {
