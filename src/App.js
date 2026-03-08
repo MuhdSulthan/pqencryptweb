@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import QRCode from 'qrcode';
 import {
@@ -891,7 +891,7 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
           if (event.candidate) {
             console.log('🧊 Sending ICE candidate for outgoing call');
             socket.emit('ice-candidate', {
-              roomKey: key,
+              roomKey: roomKey,
               candidate: event.candidate
             });
           }
