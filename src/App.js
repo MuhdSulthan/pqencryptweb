@@ -52,6 +52,7 @@ function App() {
   const [pendingOffer, setPendingOffer] = useState(null);
   const [pendingIceCandidates, setPendingIceCandidates] = useState([]);
   const [localStream, setLocalStream] = useState(null);
+  const peerConnectionRef = useRef(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
 
@@ -373,7 +374,17 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
             const peerConnection = new RTCPeerConnection({
               iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
+                { urls: 'stun:stun1.l.google.com:19302' },
+                {
+                  urls: 'turn:openrelay.metered.ca:80',
+                  username: 'openrelayproject',
+                  credential: 'openrelayproject'
+                },
+                {
+                  urls: 'turn:openrelay.metered.ca:443',
+                  username: 'openrelayproject',
+                  credential: 'openrelayproject'
+                }
               ]
             });
             console.log('✅ Peer connection created successfully');
@@ -403,6 +414,8 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
                 
                 // Attach stream to audio element
                 audioElement.srcObject = remoteStream;
+                audioElement.muted = false;
+                audioElement.setAttribute("playsinline", true);
                 audioElement.play().catch(e => console.log('Audio play failed:', e));
                 
                 // If video call, also create video element
@@ -426,6 +439,8 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
                     }
                   }
                   videoElement.srcObject = remoteStream;
+                  videoElement.muted = false;
+                  videoElement.setAttribute("playsinline", true);
                   videoElement.play().catch(e => console.log('Video play failed:', e));
                 }
               }
@@ -447,28 +462,43 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
                 setCallInProgress(false);
                 setIsInCall(false);
               } else if (state === 'disconnected') {
-                console.log('⚠️ Incoming call disconnected - waiting...');
-                setTimeout(() => {
-                  if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
-                    console.log('❌ Incoming call permanently lost');
-                    setCallInProgress(false);
-                    setIsInCall(false);
-                  }
-                }, 3000);
+                console.log('⚠️ Incoming call WebRTC connection disconnected');
+              }
+            };
+            
+            // Add ICE connection state monitoring for debugging
+            peerConnection.oniceconnectionstatechange = () => {
+              const state = peerConnection.iceConnectionState;
+              console.log('🧊 Web app incoming call ICE state:', state);
+              
+              switch (state) {
+                case 'connected':
+                  console.log('✅ ICE connected - media should be flowing');
+                  break;
+                case 'completed':
+                  console.log('✅ ICE completed - connection established');
+                  break;
+                case 'failed':
+                  console.log('❌ ICE failed - call cannot connect');
+                  break;
+                case 'disconnected':
+                  console.log('⚠️ ICE disconnected');
+                  break;
               }
             };
             
             peerConnection.onicecandidate = (event) => {
               if (event.candidate) {
+                console.log('🧊 Sending ICE candidate for incoming call');
                 newSocket.emit('ice-candidate', {
-                  roomKey: roomKey,
+                  roomKey: key,
                   candidate: event.candidate
                 });
               }
             };
             
             // Store peer connection for later use
-            window.currentPeerConnection = peerConnection;
+            peerConnectionRef.current = peerConnection;
             console.log('✅ Peer connection created and stored for incoming call');
             
             // Process any buffered offer and ICE candidates
@@ -507,9 +537,9 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
       setIsMuted(false);
       setIsVideoOff(false);
       
-      if (window.currentPeerConnection) {
-        window.currentPeerConnection.close();
-        window.currentPeerConnection = null;
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
       }
       
       // Clean up audio/video elements
@@ -566,9 +596,9 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
 
     newSocket.on('call-answer', async (data) => {
       console.log('📞 RECEIVED CALL ANSWER:', data);
-      if (window.currentPeerConnection) {
+      if (peerConnectionRef.current) {
         try {
-          await window.currentPeerConnection.setRemoteDescription(data.answer);
+          await peerConnectionRef.current.setRemoteDescription(data.answer);
           console.log('Set remote description from answer');
         } catch (error) {
           console.error('Error handling call answer:', error);
@@ -578,9 +608,11 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
 
     newSocket.on('ice-candidate', async (data) => {
       console.log('🧊 RECEIVED ICE CANDIDATE:', data);
-      if (window.currentPeerConnection) {
+      if (peerConnectionRef.current) {
         try {
-          await window.currentPeerConnection.addIceCandidate(data.candidate);
+          await peerConnectionRef.current.addIceCandidate(
+            new RTCIceCandidate(data.candidate)
+          );
           console.log('✅ ICE candidate added successfully');
         } catch (error) {
           console.error('❌ Error adding ICE candidate:', error);
@@ -736,12 +768,22 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
         const peerConnection = new RTCPeerConnection({
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
+            { urls: 'stun:stun1.l.google.com:19302' },
+            {
+              urls: 'turn:openrelay.metered.ca:80',
+              username: 'openrelayproject',
+              credential: 'openrelayproject'
+            },
+            {
+              urls: 'turn:openrelay.metered.ca:443',
+              username: 'openrelayproject',
+              credential: 'openrelayproject'
+            }
           ]
         });
         
         // Store peer connection globally
-        window.currentPeerConnection = peerConnection;
+        peerConnectionRef.current = peerConnection;
         
         // Add tracks to peer connection
         stream.getTracks().forEach(track => {
@@ -824,10 +866,32 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
           }
         };
         
+        // Add ICE connection state monitoring for debugging
+        peerConnection.oniceconnectionstatechange = () => {
+          const state = peerConnection.iceConnectionState;
+          console.log('🧊 Web app outgoing call ICE state:', state);
+          
+          switch (state) {
+            case 'connected':
+              console.log('✅ ICE connected - media should be flowing');
+              break;
+            case 'completed':
+              console.log('✅ ICE completed - connection established');
+              break;
+            case 'failed':
+              console.log('❌ ICE failed - call cannot connect');
+              break;
+            case 'disconnected':
+              console.log('⚠️ ICE disconnected');
+              break;
+          }
+        };
+        
         peerConnection.onicecandidate = (event) => {
           if (event.candidate) {
+            console.log('🧊 Sending ICE candidate for outgoing call');
             socket.emit('ice-candidate', {
-              roomKey: roomKey,
+              roomKey: key,
               candidate: event.candidate
             });
           }
@@ -895,9 +959,9 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
       setIsVideoOff(false);
       
       // Clean up peer connection
-      if (window.currentPeerConnection) {
-        window.currentPeerConnection.close();
-        window.currentPeerConnection = null;
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
       }
       
       // Clean up audio/video elements
@@ -1118,12 +1182,12 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
     console.log('🔄 Processing pending signaling...');
     
     // Process buffered offer
-    if (pendingOffer && window.currentPeerConnection) {
+    if (pendingOffer && peerConnectionRef.current) {
       console.log('📞 Processing buffered offer...');
       try {
-        await window.currentPeerConnection.setRemoteDescription(pendingOffer.offer);
-        const answer = await window.currentPeerConnection.createAnswer();
-        await window.currentPeerConnection.setLocalDescription(answer);
+        await peerConnectionRef.current.setRemoteDescription(pendingOffer.offer);
+        const answer = await peerConnectionRef.current.createAnswer();
+        await peerConnectionRef.current.setLocalDescription(answer);
         
         socket.emit('call-answer', {
           roomKey: roomKey,
@@ -1137,11 +1201,11 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
     }
     
     // Process buffered ICE candidates
-    if (pendingIceCandidates.length > 0 && window.currentPeerConnection) {
+    if (pendingIceCandidates.length > 0 && peerConnectionRef.current) {
       console.log(`🧊 Processing ${pendingIceCandidates.length} buffered ICE candidates...`);
       for (const candidate of pendingIceCandidates) {
         try {
-          await window.currentPeerConnection.addIceCandidate(candidate);
+          await peerConnectionRef.current.addIceCandidate(candidate);
           console.log('✅ Buffered ICE candidate added');
         } catch (error) {
           console.error('❌ Error adding buffered ICE candidate:', error);
