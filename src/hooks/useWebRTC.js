@@ -180,7 +180,7 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
   // ── Incoming call: Phase 2a — user clicked Accept button (user gesture!) ───
   const acceptCall = async () => {
     if (!incomingCall) return;
-    const { callerName, callType, callId, roomKey } = incomingCall;
+    const { callType, callId, roomKey } = incomingCall;
     setIncomingCall(null);
     setCallInProgress(true);
     setIsInCall(true);
