@@ -111,6 +111,7 @@ function App() {
       onIceCandidate: handleIceCandidate,
       onCallEnded: handleCallEnded,
     });
+    setRoomKey(generatedKey); // ← sync App state so header and file share see the key
     setCurrentView('chat');
   };
 
