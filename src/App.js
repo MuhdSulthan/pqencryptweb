@@ -55,6 +55,7 @@ function App() {
   const {
     isInCall, callInProgress, currentCallType, callDuration,
     isMuted, isVideoOff,
+    localStream, remoteStream,
     incomingCall,
     formatCallDuration, startCall, endCall,
     acceptCall, declineCall,
@@ -262,6 +263,7 @@ function App() {
           currentCallType={currentCallType} callDuration={callDuration}
           callInProgress={callInProgress} roomKey={roomKey}
           isMuted={isMuted} isVideoOff={isVideoOff}
+          localStream={localStream} remoteStream={remoteStream}
           formatCallDuration={formatCallDuration}
           onEndCall={handleEndCall}
           onToggleMute={toggleMute}

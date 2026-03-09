@@ -17,7 +17,8 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [localStream, setLocalStream] = useState(null);
-  const [incomingCall, setIncomingCall] = useState(null); // { callerName, callType, callId, roomKey }
+  const [remoteStream, setRemoteStream] = useState(null);
+  const [incomingCall, setIncomingCall] = useState(null);
 
   const peerConnectionRef = useRef(null);
   const pendingOfferRef = useRef(null);
@@ -89,59 +90,18 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
     return pc;
   };
 
-  const attachRemoteStream = (stream, callType) => {
-    let audio = document.getElementById('remoteAudio');
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.id = 'remoteAudio';
-      audio.autoplay = true;
-      audio.style.display = 'none';
-      document.body.appendChild(audio);
-    }
-    audio.srcObject = stream;
-    audio.muted = false;
-    audio.play().catch(() => {});
-
-    if (callType === 'video') {
-      let video = document.getElementById('remoteVideo');
-      if (!video) {
-        video = document.createElement('video');
-        video.id = 'remoteVideo';
-        video.autoplay = true;
-        video.style.cssText = 'width:100%;height:100%;object-fit:contain;background:#000';
-        const placeholder = document.querySelector('.remote-video-placeholder');
-        if (placeholder) { placeholder.innerHTML = ''; placeholder.appendChild(video); }
-      }
-      video.srcObject = stream;
-      video.play().catch(() => {});
-    }
+  // Store remote stream in state so React renders the media elements
+  const attachRemoteStream = (stream) => {
+    setRemoteStream(stream);
   };
 
-  const attachLocalStream = (stream) => {
-    setTimeout(() => {
-      let video = document.getElementById('localVideo');
-      if (!video) {
-        video = document.createElement('video');
-        video.id = 'localVideo';
-        video.autoplay = true;
-        video.muted = true;
-        video.style.cssText = 'width:100%;height:100%;object-fit:cover;transform:scaleX(-1)';
-        const placeholder = document.querySelector('.local-video-placeholder');
-        if (placeholder) { placeholder.innerHTML = ''; placeholder.appendChild(video); }
-      }
-      video.srcObject = stream;
-    }, 1000);
+  // Store local stream (already in state — just expose srcObject to video element)
+  const attachLocalStream = (_stream) => {
+    // localStream state is already set; CallOverlay reads it via props
   };
 
   const cleanupCallElements = () => {
-    ['remoteAudio', 'remoteVideo', 'localVideo'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) { el.srcObject = null; el.remove?.(); }
-    });
-    ['.remote-video-placeholder', '.local-video-placeholder'].forEach(sel => {
-      const el = document.querySelector(sel);
-      if (el) el.innerHTML = '';
-    });
+    setRemoteStream(null);
   };
 
   const processPendingSignaling = async (roomKey) => {
@@ -193,7 +153,7 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
 
       const pc = createPeerConnection(roomKey);
       stream.getTracks().forEach(t => pc.addTrack(t, stream));
-      pc.ontrack = ({ streams }) => { if (streams?.[0]) attachRemoteStream(streams[0], callType); };
+      pc.ontrack = ({ streams }) => { if (streams?.[0]) attachRemoteStream(streams[0]); };
       peerConnectionRef.current = pc;
 
       await processPendingSignaling(roomKey);
@@ -233,7 +193,7 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
 
       const pc = createPeerConnection(roomKey);
       stream.getTracks().forEach(t => pc.addTrack(t, stream));
-      pc.ontrack = ({ streams }) => { if (streams?.[0]) attachRemoteStream(streams[0], callType); };
+      pc.ontrack = ({ streams }) => { if (streams?.[0]) attachRemoteStream(streams[0]); };
       peerConnectionRef.current = pc;
 
       const offer = await pc.createOffer();
@@ -338,6 +298,8 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
     callDuration,
     isMuted,
     isVideoOff,
+    localStream,
+    remoteStream,
     incomingCall,
     formatCallDuration,
     startCall,
