@@ -484,6 +484,9 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
                 case 'disconnected':
                   console.log('⚠️ ICE disconnected');
                   break;
+                default:
+                  console.log('🧊 ICE state:', state);
+                  break;
               }
             };
             
@@ -883,6 +886,9 @@ const newSocket = io('https://maxyserver.servehalflife.com', {
               break;
             case 'disconnected':
               console.log('⚠️ ICE disconnected');
+              break;
+            default:
+              console.log('🧊 ICE state:', state);
               break;
           }
         };
