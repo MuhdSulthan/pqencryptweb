@@ -2868,3 +2868,92 @@ body.dark {
   width: 16px;
   height: 16px;
 }
+
+/* ── Incoming Call Modal ─────────────────────────────────────────────────── */
+.incoming-call-modal {
+  background-color: white;
+  border-radius: 20px;
+  padding: 32px 28px;
+  max-width: 340px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+.dark .incoming-call-modal {
+  background-color: #1a1f1e;
+  color: #E9EDF0;
+}
+
+.incoming-call-icon {
+  font-size: 56px;
+  margin-bottom: 16px;
+  animation: callRing 1s ease-in-out infinite;
+}
+
+@keyframes callRing {
+  0%, 100% { transform: rotate(-10deg) scale(1); }
+  25%       { transform: rotate(10deg) scale(1.1); }
+  50%       { transform: rotate(-8deg) scale(1); }
+  75%       { transform: rotate(8deg) scale(1.05); }
+}
+
+.incoming-call-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #333;
+  margin: 0 0 8px;
+}
+
+.dark .incoming-call-title {
+  color: #E9EDF0;
+}
+
+.incoming-call-caller {
+  font-size: 16px;
+  color: #666;
+  margin: 0 0 28px;
+}
+
+.dark .incoming-call-caller {
+  color: #8b949e;
+}
+
+.incoming-call-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.accept-call-btn,
+.decline-call-btn {
+  flex: 1;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.accept-call-btn {
+  background: linear-gradient(135deg, #28a745, #20c997);
+  color: white;
+}
+
+.accept-call-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4);
+}
+
+.decline-call-btn {
+  background: linear-gradient(135deg, #dc3545, #e74c3c);
+  color: white;
+}
+
+.decline-call-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
+}

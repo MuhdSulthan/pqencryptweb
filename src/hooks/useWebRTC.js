@@ -17,6 +17,7 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [localStream, setLocalStream] = useState(null);
+  const [incomingCall, setIncomingCall] = useState(null); // { callerName, callType, callId, roomKey }
 
   const peerConnectionRef = useRef(null);
   const pendingOfferRef = useRef(null);
@@ -165,40 +166,55 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
     pendingIceCandidatesRef.current = [];
   };
 
-  // ── Incoming call handler (called by useSocket callback) ─────────────────
-  const handleIncomingCall = async (data, roomKey) => {
-    if (callInProgress) return;
+  // ── Incoming call: Phase 1 — store pending call, show UI (no confirm!) ─────
+  const handleIncomingCall = (data, roomKey) => {
+    if (callInProgress) return; // ignore if already in a call
+    setIncomingCall({
+      callerName: data.callerName,
+      callType: data.callType,
+      callId: data.callId,
+      roomKey,
+    });
+  };
 
-    const callTypeLabel = data.callType === 'audio' ? 'Voice' : 'Video';
-    const accept = window.confirm(`🔔 Incoming ${callTypeLabel} call from ${data.callerName}. Accept?`);
-
-    if (!accept) {
-      emitWebRTC('reject-call', { roomKey, callId: data.callId });
-      return;
-    }
-
+  // ── Incoming call: Phase 2a — user clicked Accept button (user gesture!) ───
+  const acceptCall = async () => {
+    if (!incomingCall) return;
+    const { callerName, callType, callId, roomKey } = incomingCall;
+    setIncomingCall(null);
     setCallInProgress(true);
     setIsInCall(true);
-    setCurrentCallType(data.callType);
+    setCurrentCallType(callType);
 
     try {
-      const stream = await getMediaStream(data.callType);
+      const stream = await getMediaStream(callType);
       setLocalStream(stream);
-      if (data.callType === 'video') attachLocalStream(stream);
+      if (callType === 'video') attachLocalStream(stream);
 
       const pc = createPeerConnection(roomKey);
       stream.getTracks().forEach(t => pc.addTrack(t, stream));
-      pc.ontrack = ({ streams }) => { if (streams?.[0]) attachRemoteStream(streams[0], data.callType); };
+      pc.ontrack = ({ streams }) => { if (streams?.[0]) attachRemoteStream(streams[0], callType); };
       peerConnectionRef.current = pc;
 
       await processPendingSignaling(roomKey);
-      emitWebRTC('accept-call', { roomKey, callId: data.callId });
+      emitWebRTC('accept-call', { roomKey, callId });
     } catch (err) {
       console.error('Accept call error:', err);
-      alert('Failed to accept call. Check camera/mic permissions.');
+      if (err.name === 'NotAllowedError') {
+        alert('Camera/microphone permission was denied. Please allow access in your browser settings and try again.');
+      } else {
+        alert('Failed to accept call. Please check your camera and microphone.');
+      }
       setCallInProgress(false);
       setIsInCall(false);
     }
+  };
+
+  // ── Incoming call: Phase 2b — user clicked Decline button ─────────────────
+  const declineCall = () => {
+    if (!incomingCall) return;
+    emitWebRTC('reject-call', { roomKey: incomingCall.roomKey, callId: incomingCall.callId });
+    setIncomingCall(null);
   };
 
   // ── Outgoing call ─────────────────────────────────────────────────────────
@@ -322,10 +338,13 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
     callDuration,
     isMuted,
     isVideoOff,
+    incomingCall,
     formatCallDuration,
     startCall,
     endCall,
     handleIncomingCall,
+    acceptCall,
+    declineCall,
     handleCallOffer,
     handleCallAnswer,
     handleIceCandidate,

@@ -17,10 +17,11 @@ import { MessageList }  from './components/MessageList';
 import { CallOverlay }  from './components/CallOverlay';
 
 // Modals
-import { WelcomeModal }  from './components/modals/WelcomeModal';
-import { QRCodeModal }   from './components/modals/QRCodeModal';
-import { SecurityModal } from './components/modals/SecurityModal';
-import { UserListModal } from './components/modals/UserListModal';
+import { WelcomeModal }      from './components/modals/WelcomeModal';
+import { QRCodeModal }       from './components/modals/QRCodeModal';
+import { SecurityModal }     from './components/modals/SecurityModal';
+import { UserListModal }     from './components/modals/UserListModal';
+import { IncomingCallModal } from './components/modals/IncomingCallModal';
 
 function App() {
   const [currentView, setCurrentView] = useState('home');
@@ -54,7 +55,9 @@ function App() {
   const {
     isInCall, callInProgress, currentCallType, callDuration,
     isMuted, isVideoOff,
+    incomingCall,
     formatCallDuration, startCall, endCall,
+    acceptCall, declineCall,
     handleIncomingCall, handleCallOffer, handleCallAnswer,
     handleIceCandidate, handleCallEnded,
     toggleMute, toggleVideo,
@@ -262,6 +265,15 @@ function App() {
           onEndCall={handleEndCall}
           onToggleMute={toggleMute}
           onToggleVideo={toggleVideo}
+        />
+      )}
+
+      {incomingCall && (
+        <IncomingCallModal
+          callerName={incomingCall.callerName}
+          callType={incomingCall.callType}
+          onAccept={acceptCall}
+          onDecline={declineCall}
         />
       )}
 
