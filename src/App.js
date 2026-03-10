@@ -106,6 +106,7 @@ function App() {
       key: generatedKey,
       name: username.trim(),
       isCreator: true,
+      decryptMessage,
       onIncomingCall: (data) => handleIncomingCall(data, generatedKey),
       onCallOffer: handleCallOffer,
       onCallAnswer: handleCallAnswer,
@@ -128,6 +129,7 @@ function App() {
       key,
       name: username.trim(),
       isCreator: false,
+      decryptMessage,
       onIncomingCall: (data) => handleIncomingCall(data, key),
       onCallOffer: handleCallOffer,
       onCallAnswer: handleCallAnswer,
@@ -137,28 +139,23 @@ function App() {
     setCurrentView('chat');
   };
 
-  const handleJoinViaUrl = async (roomCode) => {
+  const handleJoinViaUrl = (roomCode) => {
     const err = validateUsername(username);
     if (err) { setUsernameError(err); return; }
-    try {
-      const res = await fetch(`https://maxyserver.servehalflife.com/room/${roomCode}`, {
-        mode: 'cors', credentials: 'omit',
-      });
-      const data = await res.json();
-      if (data.success) {
-        localStorage.setItem('username', username.trim());
-        addToRecentRooms(roomCode);
-        joinRoom({
-          key: roomCode, name: username.trim(), isCreator: false,
-          onIncomingCall: (d) => handleIncomingCall(d, roomCode),
-          onCallOffer: handleCallOffer, onCallAnswer: handleCallAnswer,
-          onIceCandidate: handleIceCandidate, onCallEnded: handleCallEnded,
-        });
-        setCurrentView('chat');
-      }
-    } catch (err) {
-      alert('Failed to join room via URL');
-    }
+    if (!roomCode) { alert('No room code provided.'); return; }
+    if (!keys) { alert('Quantum encryption keys are still loading. Please wait.'); return; }
+    const key = roomCode.toUpperCase();
+    localStorage.setItem('username', username.trim());
+    addToRecentRooms(key);
+    joinRoom({
+      key, name: username.trim(), isCreator: false,
+      decryptMessage,
+      onIncomingCall: (d) => handleIncomingCall(d, key),
+      onCallOffer: handleCallOffer, onCallAnswer: handleCallAnswer,
+      onIceCandidate: handleIceCandidate, onCallEnded: handleCallEnded,
+    });
+    setRoomKey(key);
+    setCurrentView('chat');
   };
 
   const handleLeaveRoom = () => {
@@ -168,9 +165,9 @@ function App() {
     setGeneratedKey('');
   };
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
-    const sent = sendMessage({ message, userId, username, keys, userPublicKeys, encryptMessage });
+    const sent = await sendMessage({ message, userId, username, keys, userPublicKeys, encryptMessage });
     if (sent) setMessage('');
   };
 

@@ -2,10 +2,19 @@ import { useState, useRef, useEffect } from 'react';
 
 const ICE_SERVERS = {
   iceServers: [
+    // STUN — discover public IP
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    // TURN — relay for symmetric NAT (openrelay)
+    { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
     { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turns:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    // TURN — freestun (no account needed)
+    { urls: 'turn:freestun.net:3478',  username: 'free', credential: 'free' },
+    { urls: 'turns:freestun.net:5349', username: 'free', credential: 'free' },
   ],
 };
 
@@ -64,27 +73,46 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
     pc.onicecandidate = ({ candidate }) => {
-      if (candidate) emitWebRTC('ice-candidate', { roomKey, candidate });
+      if (candidate) {
+        console.log('📡 Sending ICE candidate:', candidate.type, candidate.protocol, candidate.address);
+        emitWebRTC('ice-candidate', { roomKey, candidate });
+      } else {
+        console.log('✅ ICE gathering complete');
+      }
     };
 
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
-      console.log('🔗 WebRTC state:', state);
-      if (state === 'failed') {
+      console.log('🔗 WebRTC connection state:', state);
+      if (state === 'connected') {
+        console.log('✅ Peers connected! Media should be flowing.');
+      } else if (state === 'failed') {
+        console.error('❌ WebRTC connection FAILED — ICE could not find a path between peers.');
+        alert('Call connection failed. This may be due to a firewall or NAT. Please try again.');
         setCallInProgress(false);
         setIsInCall(false);
+        setRemoteStream(null);
       } else if (state === 'disconnected') {
         setTimeout(() => {
           if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
             setCallInProgress(false);
             setIsInCall(false);
+            setRemoteStream(null);
           }
         }, 3000);
       }
     };
 
+    pc.onicegatheringstatechange = () => {
+      console.log('🧊 ICE gathering state:', pc.iceGatheringState);
+    };
+
     pc.oniceconnectionstatechange = () => {
-      console.log('🧊 ICE state:', pc.iceConnectionState);
+      console.log('🔀 ICE connection state:', pc.iceConnectionState);
+    };
+
+    pc.ontrack = ({ streams, track }) => {
+      console.log('🎵 ontrack fired — track kind:', track.kind, '| streams:', streams.length);
     };
 
     return pc;
