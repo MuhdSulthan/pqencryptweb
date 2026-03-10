@@ -2976,16 +2976,20 @@ body.dark {
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  color: #333;
   flex-shrink: 0;
   gap: 12px;
   min-height: 60px;
 }
 
 .dark .chat-header {
-  background: linear-gradient(135deg, #1a1f2e 0%, #2d1b45 100%);
+  background: #0D1418;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  color: #E9EDF0;
 }
+
 
 .chat-header-info {
   flex: 1;

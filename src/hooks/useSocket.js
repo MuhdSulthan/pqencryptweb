@@ -63,6 +63,11 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
       const myId    = userIdRef.current;
       const pubKeys = userPublicKeysRef.current;
 
+      // The server echoes our own send back to us. We already stored the
+      // plaintext via addOwnMessage — drop the echo to avoid the duplicate
+      // [encrypted] bubble (our own ID is excluded from msg.encrypted).
+      if (msg.from === myId) return;
+
       if (myKeys && myId && msg.encrypted?.[myId]) {
         try {
           const senderPub = pubKeys[msg.from] || null;
@@ -73,9 +78,10 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
           console.error('❌ Decryption failed:', err.message);
         }
       }
-      // Sender's own message or decryption unavailable
+      // Decryption unavailable or failed
       setMessages(prev => [...prev, { ...msg, text: msg.text || '[encrypted]', decrypted: false }]);
     });
+
 
     newSocket.on('new user', ({ userId: uid, publicKey, username }) => {
       try {

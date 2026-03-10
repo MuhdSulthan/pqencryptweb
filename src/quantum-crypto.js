@@ -82,7 +82,7 @@ export async function encryptWithQuantum(message, recipientPublicKey, senderPriv
   let signature = null;
   if (senderPrivateKey?.dsa) {
     const toSign = concat(kemCiphertext, iv, ciphertext);
-    signature = Array.from(DSA.sign(toSign, senderPrivateKey.dsa));
+    signature = Array.from(DSA.sign(senderPrivateKey.dsa, toSign));
   }
 
   return {
@@ -113,7 +113,7 @@ export async function decryptWithQuantum(encryptedData, recipientPrivateKey, sen
   if (encryptedData.signature && senderPublicKey?.dsa) {
     const toVerify = concat(kemCiphertext, iv, ciphertext);
     const sig = new Uint8Array(encryptedData.signature);
-    const valid = DSA.verify(toVerify, sig, senderPublicKey.dsa);
+    const valid = DSA.verify(senderPublicKey.dsa, toVerify, sig);
     if (!valid) throw new Error('⛔ ML-DSA signature verification failed — message rejected');
     console.log('✅ ML-DSA signature verified');
   }
@@ -131,7 +131,7 @@ export async function decryptWithQuantum(encryptedData, recipientPrivateKey, sen
 
 export async function signWithQuantum(message, privateKey) {
   const bytes = new TextEncoder().encode(typeof message === 'string' ? message : JSON.stringify(message));
-  const signature = DSA.sign(bytes, privateKey.dsa);
+  const signature = DSA.sign(privateKey.dsa, bytes);
   return { message, signature: Array.from(signature), algorithm: 'ML-DSA-87', timestamp: Date.now() };
 }
 
@@ -140,7 +140,7 @@ export async function verifyWithQuantum(signedData, publicKey) {
     const bytes = new TextEncoder().encode(
       typeof signedData.message === 'string' ? signedData.message : JSON.stringify(signedData.message)
     );
-    const valid = DSA.verify(bytes, new Uint8Array(signedData.signature), publicKey.dsa);
+    const valid = DSA.verify(publicKey.dsa, bytes, new Uint8Array(signedData.signature));
     console.log(valid ? '✅ ML-DSA signature verified' : '❌ ML-DSA signature invalid');
     return valid;
   } catch { return false; }
