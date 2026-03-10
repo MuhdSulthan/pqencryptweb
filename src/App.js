@@ -71,7 +71,7 @@ function App() {
     socket,
     userId, messages, roomUsers, userPublicKeys,
     roomLocked, isRoomCreator,
-    joinRoom, leaveRoom, sendMessage,
+    joinRoom, leaveRoom, sendMessage, addOwnMessage,
     sendCallNotification, lockRoom, unlockRoom, emitWebRTC,
   } = useSocket({ keys, exportPublicKey, importPublicKey });
 
@@ -90,6 +90,11 @@ function App() {
     if (!localStorage.getItem('hasVisited')) {
       setShowWelcome(true);
       localStorage.setItem('hasVisited', 'true');
+    }
+    // Request notification permission early so the browser prompt doesn't
+    // interrupt the user mid-call when an incoming-call notification fires.
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
     }
   }, []);
 
@@ -167,7 +172,12 @@ function App() {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    const sent = await sendMessage({ message, userId, username, keys, userPublicKeys, encryptMessage });
+    const trimmed = message.trim();
+    if (!trimmed) return;
+    // Store the plaintext immediately for the sender so they see their own
+    // message without waiting for a server round-trip or attempting decryption.
+    addOwnMessage(trimmed, userId, username);
+    const sent = await sendMessage({ message: trimmed, userId, username, keys, userPublicKeys, encryptMessage });
     if (sent) setMessage('');
   };
 

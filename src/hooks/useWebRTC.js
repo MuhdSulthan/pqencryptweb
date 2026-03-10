@@ -163,7 +163,31 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
       callId: data.callId,
       roomKey,
     });
+
+    // Fire an OS-level browser notification so the user is alerted even if
+    // the tab is in the background or minimised.
+    const callLabel = data.callType === 'video' ? 'video call' : 'voice call';
+    const title   = `📞 Incoming ${callLabel}`;
+    const body    = `${data.callerName} is calling…`;
+
+    const showNotification = () => {
+      try {
+        const n = new Notification(title, { body, icon: '/favicon.ico', tag: 'incoming-call' });
+        // Auto-close after 30 s (the modal handles the actual accept/decline)
+        setTimeout(() => n.close(), 30_000);
+      } catch (_) {}
+    };
+
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') {
+        showNotification();
+      } else if (Notification.permission === 'default') {
+        Notification.requestPermission().then(p => { if (p === 'granted') showNotification(); });
+      }
+      // 'denied' → silently skip
+    }
   };
+
 
   // ── Incoming call: Phase 2a — user clicked Accept button (user gesture!) ───
   const acceptCall = async () => {
