@@ -1,21 +1,31 @@
 import { useState, useRef, useEffect } from 'react';
 
+// ─── ICE / TURN Configuration ───────────────────────────────────────────────
+// Self-hosted coturn on the project's AWS EC2 instance.
+// See server setup instructions — install coturn, open ports 3478/5349 + 49152-65535 UDP in EC2 Security Group.
+// Replace YOUR_EC2_PUBLIC_IP and TURN_PASSWORD with the values in /etc/turnserver.conf on the EC2 box.
+const TURN_HOST = '13.127.197.229'; // EC2 public IP — no DNS needed, bypasses subdomain resolution issues
+const TURN_USER = 'projectanonymous';
+const TURN_PASS = 'F,7ld@coturn'; // ← set this after configuring coturn
+
 const ICE_SERVERS = {
   iceServers: [
-    // STUN — discover public IP
+    // STUN — fast direct-connect path (no relay, free)
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    // TURN — relay for symmetric NAT (openrelay)
-    { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turns:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-    // TURN — freestun (no account needed)
-    { urls: 'turn:freestun.net:3478',  username: 'free', credential: 'free' },
-    { urls: 'turns:freestun.net:5349', username: 'free', credential: 'free' },
+
+    // TURN over UDP — fastest relay path
+    { urls: `turn:${TURN_HOST}:3478`, username: TURN_USER, credential: TURN_PASS },
+
+    // TURN over TCP — fallback for networks that block UDP
+    { urls: `turn:${TURN_HOST}:3478?transport=tcp`, username: TURN_USER, credential: TURN_PASS },
+
+    // TURNS (TURN over TLS) — fallback for deep-packet-inspection firewalls
+    { urls: `turns:${TURN_HOST}:5349`, username: TURN_USER, credential: TURN_PASS },
   ],
+  // Force relay only if direct connection is not established within 2 s.
+  // Remove this line if you want to allow direct peer connections first.
+  // iceTransportPolicy: 'relay',
 };
 
 export function useWebRTC({ emitWebRTC, sendCallNotification }) {
@@ -149,7 +159,7 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
     }
 
     for (const candidate of pendingIceCandidatesRef.current) {
-      try { await pc.addIceCandidate(candidate); } catch (_) {}
+      try { await pc.addIceCandidate(candidate); } catch (_) { }
     }
     pendingIceCandidatesRef.current = [];
   };
@@ -167,15 +177,15 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
     // Fire an OS-level browser notification so the user is alerted even if
     // the tab is in the background or minimised.
     const callLabel = data.callType === 'video' ? 'video call' : 'voice call';
-    const title   = `📞 Incoming ${callLabel}`;
-    const body    = `${data.callerName} is calling…`;
+    const title = `📞 Incoming ${callLabel}`;
+    const body = `${data.callerName} is calling…`;
 
     const showNotification = () => {
       try {
         const n = new Notification(title, { body, icon: '/favicon.ico', tag: 'incoming-call' });
         // Auto-close after 30 s (the modal handles the actual accept/decline)
         setTimeout(() => n.close(), 30_000);
-      } catch (_) {}
+      } catch (_) { }
     };
 
     if ('Notification' in window) {
