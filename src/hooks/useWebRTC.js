@@ -315,9 +315,15 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
     if (peerConnectionRef.current) {
       try {
         await peerConnectionRef.current.setRemoteDescription(data.offer);
+        // Drain buffered ICE candidates now that remote description is set
+        for (const c of pendingIceCandidatesRef.current) {
+          try { await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+        }
+        pendingIceCandidatesRef.current = [];
         const answer = await peerConnectionRef.current.createAnswer();
         await peerConnectionRef.current.setLocalDescription(answer);
-        emitWebRTC('call-answer', { answer });
+        // data.roomKey is now forwarded by the server so we can route the answer
+        emitWebRTC('call-answer', { roomKey: data.roomKey, answer });
       } catch (err) { console.error('Call offer error:', err); }
     } else {
       pendingOfferRef.current = data;
@@ -327,14 +333,26 @@ export function useWebRTC({ emitWebRTC, sendCallNotification }) {
   const handleCallAnswer = async (data) => {
     try {
       await peerConnectionRef.current?.setRemoteDescription(data.answer);
+      // Drain ICE candidates that arrived before the remote description was set
+      const pc = peerConnectionRef.current;
+      if (pc) {
+        for (const c of pendingIceCandidatesRef.current) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+        }
+        pendingIceCandidatesRef.current = [];
+      }
     } catch (err) { console.error('Call answer error:', err); }
   };
 
   const handleIceCandidate = async (data) => {
-    if (peerConnectionRef.current) {
-      try { await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate)); }
+    const pc = peerConnectionRef.current;
+    // Buffer candidates until the remote description is set — addIceCandidate
+    // throws InvalidStateError if called before setRemoteDescription.
+    if (pc && pc.remoteDescription) {
+      try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); }
       catch (err) { console.error('ICE candidate error:', err); }
     } else {
+      // Store raw candidate init; will be drained after setRemoteDescription
       pendingIceCandidatesRef.current.push(data.candidate);
     }
   };
