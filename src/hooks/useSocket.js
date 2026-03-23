@@ -55,7 +55,11 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
     newSocket.on('room locked',   () => setRoomLocked(true));
     newSocket.on('room unlocked', () => setRoomLocked(false));
     newSocket.on('system message',     (msg) => setMessages(prev => [...prev, msg]));
-    newSocket.on('chat message plain', (msg) => setMessages(prev => [...prev, msg]));
+    newSocket.on('chat message plain', (msg) => {
+      // Drop echo of our own plain messages (same dedup as the encrypted handler)
+      if (msg.from && msg.from === userIdRef.current) return;
+      setMessages(prev => [...prev, msg]);
+    });
 
     // Encrypted messages — decrypt before storing
     newSocket.on('chat message', async (msg) => {
