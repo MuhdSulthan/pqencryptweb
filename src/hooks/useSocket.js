@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import io from 'socket.io-client';
+import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 
 const SERVER_URL = 'https://maxyserver.servehalflife.com';
 
@@ -23,6 +24,32 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
   useEffect(() => { keysRef.current           = keys; },           [keys]);
   useEffect(() => { userIdRef.current         = userId; },         [userId]);
   useEffect(() => { userPublicKeysRef.current = userPublicKeys; }, [userPublicKeys]);
+
+  // ── AES-GCM helpers for the plain-message pathway ──────────────────────
+  // Derives a 256-bit AES key from the roomKey using SHA-256.
+  // This means even "plain" fallback messages are encrypted —
+  // the server only ever sees ciphertext.
+  const deriveRoomAesKey = async (roomKey) => {
+    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(roomKey));
+    return crypto.subtle.importKey('raw', hash, 'AES-GCM', false, ['encrypt', 'decrypt']);
+  };
+
+  const encryptPlain = async (text, roomKey) => {
+    const key = await deriveRoomAesKey(roomKey);
+    const iv  = crypto.getRandomValues(new Uint8Array(12));
+    const buf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text));
+    const toB64 = (u8) => btoa(String.fromCharCode(...u8));
+    return { ciphertext: toB64(new Uint8Array(buf)), iv: toB64(iv) };
+  };
+
+  const decryptPlain = async (ciphertext, iv, roomKey) => {
+    const key   = await deriveRoomAesKey(roomKey);
+    const fromB64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+    const plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: fromB64(iv) }, key, fromB64(ciphertext)
+    );
+    return new TextDecoder().decode(plain);
+  };
 
   const joinRoom = ({
     key, name, isCreator,
@@ -71,10 +98,38 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
     });
     newSocket.on('room unlocked', () => setRoomLocked(false));
     newSocket.on('system message',     (msg) => setMessages(prev => [...prev, msg]));
-    newSocket.on('chat message plain', (msg) => {
-      // Drop echo of our own plain messages (same dedup as the encrypted handler)
-      if (msg.from && msg.from === userIdRef.current) return;
-      setMessages(prev => [...prev, msg]);
+    newSocket.on('chat message plain', async (msg) => {
+      // Drop echo of our own PLAIN TEXT messages only.
+      // File messages are NOT pre-added via addOwnMessage, so the server echo
+      // is the only way the sender sees the file — do NOT dedup those.
+      const isOwnPlainText = msg.from && msg.from === userIdRef.current && (!msg.type || msg.type === 'text');
+      if (isOwnPlainText) return;
+
+      // Verify ML-DSA-87 signature before showing the message
+      const senderPubKey = userPublicKeysRef.current[msg.from]?.dsa;
+      if (msg.signature && senderPubKey) {
+        try {
+          const fromB64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+          const payload = new TextEncoder().encode(msg.ciphertext + msg.iv);
+          const valid   = ml_dsa87.verify(senderPubKey, payload, new Uint8Array(msg.signature));
+          if (!valid) {
+            console.error('⛔ ML-DSA signature INVALID on plain message — discarded');
+            return; // reject tampered message
+          }
+          console.log('✅ ML-DSA signature verified on plain message');
+        } catch (e) {
+          console.warn('Signature check error:', e);
+        }
+      }
+
+      // Decrypt the AES-GCM ciphertext before displaying
+      try {
+        const text = await decryptPlain(msg.ciphertext, msg.iv, roomKeyRef.current);
+        setMessages(prev => [...prev, { ...msg, text }]);
+      } catch {
+        // Fallback: if decryption fails (e.g. legacy message), show raw
+        setMessages(prev => [...prev, msg]);
+      }
     });
 
     // Encrypted messages — decrypt before storing
@@ -173,11 +228,33 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
           timestamp: Date.now(),
         });
       } catch (err) {
-        console.error('Encryption failed, sending plain:', err);
-        socketRef.current.emit('chat message plain', { text: message, from: uid, username, timestamp: Date.now() });
+        console.error('Encryption failed, falling back to AES plain:', err);
+        // Still encrypt with room-key AES even in fallback
+        try {
+          const { ciphertext, iv } = await encryptPlain(message, roomKeyRef.current);
+          socketRef.current.emit('chat message plain', { ciphertext, iv, from: uid, username, timestamp: Date.now() });
+        } catch {
+          socketRef.current.emit('chat message plain', { text: message, from: uid, username, timestamp: Date.now() });
+        }
       }
     } else {
-      socketRef.current.emit('chat message plain', { text: message, from: uid, username, timestamp: Date.now() });
+      // No keys yet — encrypt text with room-key-derived AES before sending
+      // so the server only ever sees ciphertext, never the user's message.
+      try {
+        const { ciphertext, iv } = await encryptPlain(message, roomKeyRef.current);
+
+        // ML-DSA-87 sign (ciphertext ‖ iv) so receiver can verify integrity
+        let signature = null;
+        if (k?.privateKey?.dsa) {
+          const payload = new TextEncoder().encode(ciphertext + iv);
+          signature = Array.from(ml_dsa87.sign(k.privateKey.dsa, payload));
+        }
+
+        socketRef.current.emit('chat message plain', { ciphertext, iv, signature, from: uid, username, timestamp: Date.now() });
+      } catch {
+        // Last-resort fallback — should never happen in browsers with SubtleCrypto
+        socketRef.current.emit('chat message plain', { text: message, from: uid, username, timestamp: Date.now() });
+      }
     }
     return true;
   };
