@@ -109,7 +109,6 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
       const senderPubKey = userPublicKeysRef.current[msg.from]?.dsa;
       if (msg.signature && senderPubKey) {
         try {
-          const fromB64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
           const payload = new TextEncoder().encode(msg.ciphertext + msg.iv);
           const valid   = ml_dsa87.verify(senderPubKey, payload, new Uint8Array(msg.signature));
           if (!valid) {
