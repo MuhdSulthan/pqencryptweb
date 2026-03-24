@@ -112,6 +112,11 @@ function App() {
       name: username.trim(),
       isCreator: true,
       decryptMessage,
+      onRoomLocked: () => {
+        // Shouldn't happen for creator, but handle gracefully
+        setCurrentView('home');
+        alert('Room is locked.');
+      },
       onIncomingCall: (data) => handleIncomingCall(data, generatedKey),
       onCallOffer: handleCallOffer,
       onCallAnswer: handleCallAnswer,
@@ -135,6 +140,11 @@ function App() {
       name: username.trim(),
       isCreator: false,
       decryptMessage,
+      onRoomLocked: () => {
+        setCurrentView('home');
+        setRoomKey('');
+        alert('This room is locked. You cannot join.');
+      },
       onIncomingCall: (data) => handleIncomingCall(data, key),
       onCallOffer: handleCallOffer,
       onCallAnswer: handleCallAnswer,
@@ -155,6 +165,11 @@ function App() {
     joinRoom({
       key, name: username.trim(), isCreator: false,
       decryptMessage,
+      onRoomLocked: () => {
+        setCurrentView('home');
+        setRoomKey('');
+        alert('This room is locked. You cannot join.');
+      },
       onIncomingCall: (d) => handleIncomingCall(d, key),
       onCallOffer: handleCallOffer, onCallAnswer: handleCallAnswer,
       onIceCandidate: handleIceCandidate, onCallEnded: handleCallEnded,

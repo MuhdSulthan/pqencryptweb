@@ -27,10 +27,15 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
   const joinRoom = ({
     key, name, isCreator,
     decryptMessage,
+    onRoomLocked,   // called when this client is REJECTED from a locked room
     onIncomingCall, onCallOffer, onCallAnswer, onIceCandidate, onCallEnded,
   }) => {
     roomKeyRef.current = key;
     setIsRoomCreator(isCreator);
+
+    // Track whether we successfully joined — helps distinguish
+    // lock-rejection from an in-room lock broadcast.
+    let hasJoined = false;
 
     const newSocket = io(SERVER_URL, { transports: ['polling', 'websocket'], reconnection: true });
     socketRef.current = newSocket;
@@ -40,7 +45,10 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
       newSocket.emit('join room', { roomKey: key, username: name });
     });
 
-    newSocket.on('room joined', (data) => setMessages(data.messages || []));
+    newSocket.on('room joined', (data) => {
+      hasJoined = true;
+      setMessages(data.messages || []);
+    });
 
     newSocket.on('user connected', (data) => {
       setUserId(data.userId);
@@ -52,7 +60,15 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
       }
     });
 
-    newSocket.on('room locked',   () => setRoomLocked(true));
+    newSocket.on('room locked', () => {
+      if (!hasJoined) {
+        // We were rejected before ever joining — navigate back with an error
+        newSocket.disconnect();
+        onRoomLocked?.();
+        return;
+      }
+      setRoomLocked(true);
+    });
     newSocket.on('room unlocked', () => setRoomLocked(false));
     newSocket.on('system message',     (msg) => setMessages(prev => [...prev, msg]));
     newSocket.on('chat message plain', (msg) => {
