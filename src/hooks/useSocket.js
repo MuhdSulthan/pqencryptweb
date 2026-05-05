@@ -110,11 +110,11 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
       if (msg.signature && senderPubKey) {
         try {
           const payload = new TextEncoder().encode(msg.ciphertext + msg.iv);
-          // Defensive cast: importPublicKey returns Uint8Array but guard against plain Arrays
           const dsaPubKey = senderPubKey instanceof Uint8Array
             ? senderPubKey
             : new Uint8Array(senderPubKey);
-          const valid   = ml_dsa87.verify(dsaPubKey, payload, new Uint8Array(msg.signature));
+          // @noble/post-quantum API: verify(sig, msg, publicKey)
+          const valid = ml_dsa87.verify(new Uint8Array(msg.signature), payload, dsaPubKey);
           if (!valid) {
             console.error('⛔ ML-DSA signature INVALID on plain message — discarded');
             return; // reject tampered message
@@ -254,7 +254,8 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
             ? k.privateKey.dsa
             : new Uint8Array(k.privateKey.dsa);
           if (dsaPrivKey.length === 4896) {
-            signature = Array.from(ml_dsa87.sign(dsaPrivKey, payload));
+            // @noble/post-quantum API: sign(msg, secretKey)
+            signature = Array.from(ml_dsa87.sign(payload, dsaPrivKey));
           } else {
             console.warn(`⚠️ ML-DSA signing skipped in plain fallback: got key length ${dsaPrivKey.length}`);
           }
