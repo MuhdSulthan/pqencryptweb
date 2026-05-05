@@ -153,9 +153,17 @@ export async function decryptWithQuantum(encryptedData, recipientPrivateKey, sen
   const sharedSecret = KEM.decapsulate(kemCiphertext, recipientPrivateKey.kem);
 
   // 3. AES-256-GCM decrypt
+  // WebCrypto expects ciphertext+tag concatenated. The web encryptor does this
+  // automatically, but the mobile (node-forge) stores the tag as a separate field.
+  // If a 'tag' field is present, append it now.
+  const aesInput = encryptedData.tag
+    ? new Uint8Array([...ciphertext, ...new Uint8Array(encryptedData.tag)])
+    : ciphertext;
+
   const aesKey  = await importAesKey(sharedSecret, 'decrypt');
-  const decBuf  = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, ciphertext);
+  const decBuf  = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, aesInput);
   return new TextDecoder().decode(decBuf);
+
 }
 
 // ─── Stand-alone signing (for plain-text messages or file metadata) ───────────
