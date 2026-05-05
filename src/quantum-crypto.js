@@ -99,11 +99,11 @@ export async function encryptWithQuantum(message, recipientPublicKey, senderPriv
     // ML-DSA-87 secret key must be exactly 4896 bytes — skip signing if wrong
     // (prevents crash when upstream passes a corrupted/wrong-length key).
     if (dsaPrivKey.length === 4896) {
-      signature = Array.from(DSA.sign(dsaPrivKey, toSign));
+      // @noble/post-quantum API: sign(msg, secretKey) — message first, key second
+      signature = Array.from(DSA.sign(toSign, dsaPrivKey));
     } else {
       console.warn(
-        `⚠️ ML-DSA signing skipped: expected secretKey length 4896, got ${dsaPrivKey.length}.` +
-        ' Check that k.privateKey.dsa is the DSA secret key, not publicKey or toSign.'
+        `⚠️ ML-DSA signing skipped: expected secretKey length 4896, got ${dsaPrivKey.length}.`
       );
     }
   }
@@ -139,9 +139,9 @@ export async function decryptWithQuantum(encryptedData, recipientPrivateKey, sen
     const dsaPubKey = senderPublicKey.dsa instanceof Uint8Array
       ? senderPublicKey.dsa
       : new Uint8Array(senderPublicKey.dsa);
-    // ML-DSA-87 public key must be exactly 2592 bytes — skip verify if wrong
+    // @noble/post-quantum API: verify(sig, msg, publicKey) — sig first, key last
     if (dsaPubKey.length === 2592) {
-      const valid = DSA.verify(dsaPubKey, toVerify, sig);
+      const valid = DSA.verify(sig, toVerify, dsaPubKey);
       if (!valid) throw new Error('⛔ ML-DSA signature verification failed — message rejected');
       console.log('✅ ML-DSA signature verified');
     } else {
@@ -162,7 +162,8 @@ export async function decryptWithQuantum(encryptedData, recipientPrivateKey, sen
 
 export async function signWithQuantum(message, privateKey) {
   const bytes = new TextEncoder().encode(typeof message === 'string' ? message : JSON.stringify(message));
-  const signature = DSA.sign(privateKey.dsa, bytes);
+  // @noble/post-quantum API: sign(msg, secretKey)
+  const signature = DSA.sign(bytes, privateKey.dsa);
   return { message, signature: Array.from(signature), algorithm: 'ML-DSA-87', timestamp: Date.now() };
 }
 
@@ -171,11 +172,11 @@ export async function verifyWithQuantum(signedData, publicKey) {
     const bytes = new TextEncoder().encode(
       typeof signedData.message === 'string' ? signedData.message : JSON.stringify(signedData.message)
     );
-    // Defensive cast for DSA public key
+    // @noble/post-quantum API: verify(sig, msg, publicKey)
     const dsaPubKey = publicKey.dsa instanceof Uint8Array
       ? publicKey.dsa
       : new Uint8Array(publicKey.dsa);
-    const valid = DSA.verify(dsaPubKey, bytes, new Uint8Array(signedData.signature));
+    const valid = DSA.verify(new Uint8Array(signedData.signature), bytes, dsaPubKey);
     console.log(valid ? '✅ ML-DSA signature verified' : '❌ ML-DSA signature invalid');
     return valid;
   } catch { return false; }
