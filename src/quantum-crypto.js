@@ -82,7 +82,12 @@ export async function encryptWithQuantum(message, recipientPublicKey, senderPriv
   let signature = null;
   if (senderPrivateKey?.dsa) {
     const toSign = concat(kemCiphertext, iv, ciphertext);
-    signature = Array.from(DSA.sign(senderPrivateKey.dsa, toSign));
+    // Defensive cast: ensure the DSA key is a proper Uint8Array even if it
+    // arrived as a plain Array after a JSON round-trip.
+    const dsaPrivKey = senderPrivateKey.dsa instanceof Uint8Array
+      ? senderPrivateKey.dsa
+      : new Uint8Array(senderPrivateKey.dsa);
+    signature = Array.from(DSA.sign(dsaPrivKey, toSign));
   }
 
   return {
@@ -113,7 +118,11 @@ export async function decryptWithQuantum(encryptedData, recipientPrivateKey, sen
   if (encryptedData.signature && senderPublicKey?.dsa) {
     const toVerify = concat(kemCiphertext, iv, ciphertext);
     const sig = new Uint8Array(encryptedData.signature);
-    const valid = DSA.verify(senderPublicKey.dsa, toVerify, sig);
+    // Defensive cast for the sender's DSA public key
+    const dsaPubKey = senderPublicKey.dsa instanceof Uint8Array
+      ? senderPublicKey.dsa
+      : new Uint8Array(senderPublicKey.dsa);
+    const valid = DSA.verify(dsaPubKey, toVerify, sig);
     if (!valid) throw new Error('⛔ ML-DSA signature verification failed — message rejected');
     console.log('✅ ML-DSA signature verified');
   }
@@ -140,7 +149,11 @@ export async function verifyWithQuantum(signedData, publicKey) {
     const bytes = new TextEncoder().encode(
       typeof signedData.message === 'string' ? signedData.message : JSON.stringify(signedData.message)
     );
-    const valid = DSA.verify(publicKey.dsa, bytes, new Uint8Array(signedData.signature));
+    // Defensive cast for DSA public key
+    const dsaPubKey = publicKey.dsa instanceof Uint8Array
+      ? publicKey.dsa
+      : new Uint8Array(publicKey.dsa);
+    const valid = DSA.verify(dsaPubKey, bytes, new Uint8Array(signedData.signature));
     console.log(valid ? '✅ ML-DSA signature verified' : '❌ ML-DSA signature invalid');
     return valid;
   } catch { return false; }
