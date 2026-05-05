@@ -68,8 +68,19 @@ async function importAesKey(sharedSecret, mode) {
  * @returns Encrypted blob { kemCiphertext, iv, ciphertext, signature, algorithm }
  */
 export async function encryptWithQuantum(message, recipientPublicKey, senderPrivateKey) {
+  // ── DIAGNOSTIC (remove after root-cause is found) ───────────────────────────
+  console.log('[encryptWithQuantum] senderPrivateKey.dsa:', {
+    type:        Object.prototype.toString.call(senderPrivateKey?.dsa),
+    constructor: senderPrivateKey?.dsa?.constructor?.name,
+    length:      senderPrivateKey?.dsa?.length,
+    isU8A:       senderPrivateKey?.dsa instanceof Uint8Array,
+    recipientKemLen: recipientPublicKey?.kem?.length,
+    recipientDsaLen: recipientPublicKey?.dsa?.length,
+  });
+  // ────────────────────────────────────────────────────────────────────────────
   // 1. ML-KEM encapsulate → shared secret + kemCiphertext
   const { cipherText: kemCiphertext, sharedSecret } = KEM.encapsulate(recipientPublicKey.kem);
+
 
   // 2. AES-256-GCM encrypt
   const aesKey   = await importAesKey(sharedSecret, 'encrypt');
