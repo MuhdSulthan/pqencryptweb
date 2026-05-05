@@ -110,7 +110,11 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
       if (msg.signature && senderPubKey) {
         try {
           const payload = new TextEncoder().encode(msg.ciphertext + msg.iv);
-          const valid   = ml_dsa87.verify(senderPubKey, payload, new Uint8Array(msg.signature));
+          // Defensive cast: importPublicKey returns Uint8Array but guard against plain Arrays
+          const dsaPubKey = senderPubKey instanceof Uint8Array
+            ? senderPubKey
+            : new Uint8Array(senderPubKey);
+          const valid   = ml_dsa87.verify(dsaPubKey, payload, new Uint8Array(msg.signature));
           if (!valid) {
             console.error('⛔ ML-DSA signature INVALID on plain message — discarded');
             return; // reject tampered message
@@ -246,7 +250,11 @@ export function useSocket({ keys, exportPublicKey, importPublicKey }) {
         let signature = null;
         if (k?.privateKey?.dsa) {
           const payload = new TextEncoder().encode(ciphertext + iv);
-          signature = Array.from(ml_dsa87.sign(k.privateKey.dsa, payload));
+          // Defensive cast: ensure Uint8Array even if key arrives as a plain Array
+          const dsaPrivKey = k.privateKey.dsa instanceof Uint8Array
+            ? k.privateKey.dsa
+            : new Uint8Array(k.privateKey.dsa);
+          signature = Array.from(ml_dsa87.sign(dsaPrivKey, payload));
         }
 
         socketRef.current.emit('chat message plain', { ciphertext, iv, signature, from: uid, username, timestamp: Date.now() });
