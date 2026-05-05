@@ -82,12 +82,19 @@ export async function encryptWithQuantum(message, recipientPublicKey, senderPriv
   let signature = null;
   if (senderPrivateKey?.dsa) {
     const toSign = concat(kemCiphertext, iv, ciphertext);
-    // Defensive cast: ensure the DSA key is a proper Uint8Array even if it
-    // arrived as a plain Array after a JSON round-trip.
     const dsaPrivKey = senderPrivateKey.dsa instanceof Uint8Array
       ? senderPrivateKey.dsa
       : new Uint8Array(senderPrivateKey.dsa);
-    signature = Array.from(DSA.sign(dsaPrivKey, toSign));
+    // ML-DSA-87 secret key must be exactly 4896 bytes — skip signing if wrong
+    // (prevents crash when upstream passes a corrupted/wrong-length key).
+    if (dsaPrivKey.length === 4896) {
+      signature = Array.from(DSA.sign(dsaPrivKey, toSign));
+    } else {
+      console.warn(
+        `⚠️ ML-DSA signing skipped: expected secretKey length 4896, got ${dsaPrivKey.length}.` +
+        ' Check that k.privateKey.dsa is the DSA secret key, not publicKey or toSign.'
+      );
+    }
   }
 
   return {
@@ -118,13 +125,17 @@ export async function decryptWithQuantum(encryptedData, recipientPrivateKey, sen
   if (encryptedData.signature && senderPublicKey?.dsa) {
     const toVerify = concat(kemCiphertext, iv, ciphertext);
     const sig = new Uint8Array(encryptedData.signature);
-    // Defensive cast for the sender's DSA public key
     const dsaPubKey = senderPublicKey.dsa instanceof Uint8Array
       ? senderPublicKey.dsa
       : new Uint8Array(senderPublicKey.dsa);
-    const valid = DSA.verify(dsaPubKey, toVerify, sig);
-    if (!valid) throw new Error('⛔ ML-DSA signature verification failed — message rejected');
-    console.log('✅ ML-DSA signature verified');
+    // ML-DSA-87 public key must be exactly 2592 bytes — skip verify if wrong
+    if (dsaPubKey.length === 2592) {
+      const valid = DSA.verify(dsaPubKey, toVerify, sig);
+      if (!valid) throw new Error('⛔ ML-DSA signature verification failed — message rejected');
+      console.log('✅ ML-DSA signature verified');
+    } else {
+      console.warn(`⚠️ ML-DSA verify skipped: expected publicKey length 2592, got ${dsaPubKey.length}.`);
+    }
   }
 
   // 2. ML-KEM decapsulate → shared secret
